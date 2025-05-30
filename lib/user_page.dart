@@ -32,7 +32,7 @@ class _RealTimeObjectDetectionState extends State<RealTimeObjectDetection> {
   List<String> _labels = [];
   double _obdSpeed = 0.0;
   Map<String, dynamic>? _userDetails;
-  int _userId = 0;
+  String _userId = "";
   String _errorMessage = '';
   StreamSubscription? _obdSubscription;
   // Bluetooth variables
@@ -51,7 +51,8 @@ class _RealTimeObjectDetectionState extends State<RealTimeObjectDetection> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final args = ModalRoute.of(context)!.settings.arguments;
       if (args is Map<String, dynamic> && args.containsKey('userId')) {
-        _userId = int.parse(args['userId'].toString());
+        _userId = args["userId"].toString(); // Now _userId is a string
+
         print('User ID from arguments: $_userId');
       } else {
         setState(() {
@@ -144,7 +145,7 @@ class _RealTimeObjectDetectionState extends State<RealTimeObjectDetection> {
   Future<void> _fetchUserDetails() async {
     try {
       final response = await http.get(
-        Uri.parse('http://192.168.1.40/driver/api.php?action=get_users'),
+        Uri.parse('https://adas-backend.onrender.com/api/get_users'),
       );
       print('Fetch user details response: ${response.body}');
       print('Status code: ${response.statusCode}');
@@ -158,8 +159,9 @@ class _RealTimeObjectDetectionState extends State<RealTimeObjectDetection> {
               throw Exception('No users found in response');
             }
             final user = users.firstWhere(
-                  (u) => int.parse(u['id'].toString()) == _userId,
-              orElse: () => {
+                  (u) => u['_id'].toString() == _userId,
+
+            orElse: () => {
                 'full_name': 'Unknown User',
                 'score': '0',
                 'car_name': 'Unknown',
@@ -491,7 +493,7 @@ class _RealTimeObjectDetectionState extends State<RealTimeObjectDetection> {
               }
               try {
                 final response = await http.post(
-                  Uri.parse('http://192.168.1.40/driver/api.php?action=log_event'),
+                  Uri.parse('https://adas-backend.onrender.com/api/log_event'),
                   headers: {'Content-Type': 'application/json'},
                   body: jsonEncode({
                     'user_id': _userId,
@@ -536,7 +538,7 @@ class _RealTimeObjectDetectionState extends State<RealTimeObjectDetection> {
   Future<void> _logEvent(String eventType, String description) async {
     try {
       final response = await http.post(
-        Uri.parse('http://192.168.1.40/driver/api.php?action=log_event'),
+        Uri.parse('https://adas-backend.onrender.com/api/log_event'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'user_id': _userId,

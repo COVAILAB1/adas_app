@@ -20,7 +20,7 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _login() async {
     try {
       final response = await http.post(
-        Uri.parse('http://192.168.1.40/driver/api.php?action=login'), // Replace with your IP or 10.0.2.2 for emulator
+        Uri.parse('https://adas-backend.onrender.com/api/login'), // Replace with your IP or 10.0.2.2 for emulator
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'username': _usernameController.text,
@@ -36,7 +36,8 @@ class _LoginPageState extends State<LoginPage> {
           final data = jsonDecode(response.body);
           if (data['success']) {
             final role = data['user']['role'];
-            final userId = int.parse(data['user']['id'].toString()); // Ensure userId is int
+            final userId = data['user']['id'].toString(); // ✅ this works
+            // Ensure userId is int
             if (role == 'admin') {
               Navigator.pushNamed(context, '/admin');
             } else if (role == 'sub_admin') {

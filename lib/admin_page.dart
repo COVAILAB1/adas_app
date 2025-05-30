@@ -20,7 +20,7 @@ class _AdminPageState extends State<AdminPage> {
 
   Future<void> _fetchUsers() async {
     final response = await http.get(
-      Uri.parse('http://192.168.1.40/driver/api.php?action=get_users'), // Replace with your local IP
+      Uri.parse('https://adas-backend.onrender.com/api/get_users'), // Replace with your local IP
     );
     final data = jsonDecode(response.body);
     if (data['success']) {
@@ -32,7 +32,7 @@ class _AdminPageState extends State<AdminPage> {
 
   Future<void> _addUser(Map<String, String> userData) async {
     final response = await http.post(
-      Uri.parse('http://192.168.1.40/driver/api.php?action=add_user'), // Replace with your local IP
+      Uri.parse('https://adas-backend.onrender.com/api/add_user'), // Replace with your local IP
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode(userData),
     );
@@ -43,7 +43,7 @@ class _AdminPageState extends State<AdminPage> {
 
   Future<void> _updateUser(Map<String, dynamic> userData) async {
     final response = await http.put(
-      Uri.parse('http://192.168.1.40/driver/api.php?action=update_user'), // Replace with your local IP
+      Uri.parse('https://adas-backend.onrender.com/api/update_user'), // Replace with your local IP
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode(userData),
     );

@@ -20,7 +20,7 @@ class _SubAdminPageState extends State<SubAdminPage> {
 
   Future<void> _fetchUsers() async {
     final response = await http.get(
-      Uri.parse('http://192.168.1.40/driver/api.php?action=get_users'), // Replace with your local IP
+      Uri.parse('https://adas-backend.onrender.com/api/get_users'), // Replace with your local IP
     );
     final data = jsonDecode(response.body);
     if (data['success']) {
@@ -32,7 +32,7 @@ class _SubAdminPageState extends State<SubAdminPage> {
 
   Future<void> _showEventLogs(int userId) async {
     final response = await http.get(
-      Uri.parse('http://192.168.1.40/driver/api.php?action=get_events&user_id=$userId'), // Replace with your local IP
+      Uri.parse('https://adas-backend.onrender.com/api/get_events?user_id=USER_ID'), // Replace with your local IP
     );
     final data = jsonDecode(response.body);
     if (data['success']) {
