@@ -8,7 +8,6 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter_bluetooth_serial/flutter_bluetooth_serial.dart';
-// Note: Assuming 'bounding_boxes.dart' contains the BoundingBoxes widget
 import 'bounding_boxes.dart';
 
 class RealTimeObjectDetection extends StatefulWidget {
@@ -31,18 +30,18 @@ class _RealTimeObjectDetectionState extends State<RealTimeObjectDetection> {
   bool _isProcessing = false;
   List<String> _labels = [];
   double _obdSpeed = 0.0;
+  int _obdRpm = 0;
   Map<String, dynamic>? _userDetails;
   String _userId = "";
   String _errorMessage = '';
   StreamSubscription? _obdSubscription;
-  // Bluetooth variables
   final _bluetooth = FlutterBluetoothSerial.instance;
   BluetoothConnection? _bluetoothConnection;
   String _bluetoothStatus = 'Disconnected';
   bool _isConnecting = false;
-  // Camera frame toggle
   bool _showCameraFrame = true;
   List<String> _speedingWarnings = [];
+  Timer? _obdTimer;
 
   @override
   void initState() {
@@ -51,8 +50,7 @@ class _RealTimeObjectDetectionState extends State<RealTimeObjectDetection> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final args = ModalRoute.of(context)!.settings.arguments;
       if (args is Map<String, dynamic> && args.containsKey('userId')) {
-        _userId = args["userId"].toString(); // Now _userId is a string
-
+        _userId = args["userId"].toString();
         print('User ID from arguments: $_userId');
       } else {
         setState(() {
@@ -68,13 +66,13 @@ class _RealTimeObjectDetectionState extends State<RealTimeObjectDetection> {
         });
       }
       _fetchUserDetails();
-      _simulateOBDData();
     });
   }
 
   @override
   void dispose() {
     _obdSubscription?.cancel();
+    _obdTimer?.cancel();
     if (_controller != null) {
       _controller!.stopImageStream();
       _controller!.dispose();
@@ -160,8 +158,7 @@ class _RealTimeObjectDetectionState extends State<RealTimeObjectDetection> {
             }
             final user = users.firstWhere(
                   (u) => u['_id'].toString() == _userId,
-
-            orElse: () => {
+              orElse: () => {
                 'full_name': 'Unknown User',
                 'score': '0',
                 'car_name': 'Unknown',
@@ -252,6 +249,8 @@ class _RealTimeObjectDetectionState extends State<RealTimeObjectDetection> {
       setState(() {
         _errorMessage = 'No valid Bluetooth MAC address provided';
         _bluetoothStatus = 'Failed';
+        _obdSpeed = 0.0;
+        _obdRpm = 0;
       });
       return;
     }
@@ -280,8 +279,7 @@ class _RealTimeObjectDetectionState extends State<RealTimeObjectDetection> {
       print('Bluetooth connected to $macAddress');
 
       _obdSubscription?.cancel();
-      _obdSubscription = null;
-
+      _obdTimer?.cancel();
       await _initializeOBD();
       _listenForOBDData();
     } catch (e) {
@@ -290,12 +288,13 @@ class _RealTimeObjectDetectionState extends State<RealTimeObjectDetection> {
         _bluetoothStatus = 'Failed';
         _isConnecting = false;
         _errorMessage = 'Failed to connect to OBD device: $e';
+        _obdSpeed = 0.0;
+        _obdRpm = 0;
       });
       _bluetoothConnection?.dispose();
       _bluetoothConnection = null;
-      if (_obdSubscription == null) {
-        _simulateOBDData();
-      }
+      _obdSubscription?.cancel();
+      _obdTimer?.cancel();
     }
   }
 
@@ -318,17 +317,21 @@ class _RealTimeObjectDetectionState extends State<RealTimeObjectDetection> {
       setState(() {
         _bluetoothStatus = 'Failed';
         _errorMessage = 'Failed to initialize OBD: $e';
+        _obdSpeed = 0.0;
+        _obdRpm = 0;
       });
       _bluetoothConnection?.dispose();
       _bluetoothConnection = null;
-      if (_obdSubscription == null) {
-        _simulateOBDData();
-      }
+      _obdSubscription?.cancel();
+      _obdTimer?.cancel();
     }
   }
 
   void _listenForOBDData() {
-    _bluetoothConnection?.input?.listen(
+    _obdSubscription?.cancel();
+    _obdTimer?.cancel();
+
+    _obdSubscription = _bluetoothConnection?.input?.listen(
           (data) {
         final response = String.fromCharCodes(data).trim();
         print('OBD data received: $response');
@@ -343,6 +346,20 @@ class _RealTimeObjectDetectionState extends State<RealTimeObjectDetection> {
           } catch (e) {
             print('Error parsing OBD speed: $e');
           }
+        } else if (response.startsWith('41 0C')) {
+          try {
+            final rpmData = response.split(' ').sublist(2);
+            if (rpmData.length >= 2) {
+              final rpmHex = rpmData[0] + rpmData[1];
+              final rpm = int.parse(rpmHex, radix: 16) / 4;
+              setState(() {
+                _obdRpm = rpm.round();
+              });
+              print('Parsed OBD RPM: $_obdRpm');
+            }
+          } catch (e) {
+            print('Error parsing OBD RPM: $e');
+          }
         }
       },
       onError: (e) {
@@ -350,55 +367,53 @@ class _RealTimeObjectDetectionState extends State<RealTimeObjectDetection> {
         setState(() {
           _bluetoothStatus = 'Failed';
           _errorMessage = 'Bluetooth connection lost: $e';
+          _obdSpeed = 0.0;
+          _obdRpm = 0;
         });
         _bluetoothConnection?.dispose();
         _bluetoothConnection = null;
-        if (_obdSubscription == null) {
-          _simulateOBDData();
-        }
+        _obdSubscription?.cancel();
+        _obdTimer?.cancel();
       },
       onDone: () {
         print('Bluetooth connection closed');
         setState(() {
           _bluetoothStatus = 'Disconnected';
+          _obdSpeed = 0.0;
+          _obdRpm = 0;
         });
         _bluetoothConnection = null;
-        if (_obdSubscription == null) {
-          _simulateOBDData();
-        }
+        _obdSubscription?.cancel();
+        _obdTimer?.cancel();
       },
     );
 
-    Timer.periodic(const Duration(seconds: 1), (timer) {
+    _obdTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
       if (_bluetoothConnection?.isConnected != true) {
         timer.cancel();
+        setState(() {
+          _bluetoothStatus = 'Disconnected';
+          _obdSpeed = 0.0;
+          _obdRpm = 0;
+        });
+        _obdSubscription?.cancel();
         return;
       }
       try {
         _bluetoothConnection?.output.add(Uint8List.fromList('010D\r'.codeUnits));
+        _bluetoothConnection?.output.add(Uint8List.fromList('010C\r'.codeUnits));
       } catch (e) {
         print('Error sending OBD request: $e');
         timer.cancel();
         setState(() {
           _bluetoothStatus = 'Failed';
           _errorMessage = 'Failed to request OBD data: $e';
+          _obdSpeed = 0.0;
+          _obdRpm = 0;
         });
         _bluetoothConnection?.dispose();
         _bluetoothConnection = null;
-        if (_obdSubscription == null) {
-          _simulateOBDData();
-        }
-      }
-    });
-  }
-
-  void _simulateOBDData() {
-    _obdSubscription?.cancel();
-    _obdSubscription = Stream.periodic(const Duration(seconds: 2)).listen((_) {
-      if (mounted) {
-        setState(() {
-          _obdSpeed = 40.0 + (DateTime.now().millisecond % 20);
-        });
+        _obdSubscription?.cancel();
       }
     });
   }
@@ -675,6 +690,13 @@ class _RealTimeObjectDetectionState extends State<RealTimeObjectDetection> {
           padding: const EdgeInsets.all(8.0),
           child: Text(
             'OBD Speed: ${_obdSpeed.toStringAsFixed(1)} km/h',
+            style: const TextStyle(fontSize: 16),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Text(
+            'OBD RPM: $_obdRpm rpm',
             style: const TextStyle(fontSize: 16),
           ),
         ),
